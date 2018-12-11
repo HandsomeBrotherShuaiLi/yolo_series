@@ -1,5 +1,5 @@
 """
-write by: Li Shuai
+written by: Li Shuai
 Time: 2018/12/04
 Localization: NIO DLLab, Shanghai
 darknet53 model body for self-driving experiments
