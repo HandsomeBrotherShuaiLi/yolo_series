@@ -10,6 +10,7 @@ from keras.optimizers import Adam
 from keras.callbacks import TensorBoard,ModelCheckpoint,EarlyStopping,ReduceLROnPlateau
 from yolo_v3.model.model import preprocess_true_boxes,\
     yolo_body,tiny_yolo_body,yolo_loss,get_random_data
+from yolo_v3.annotation import convert_annotation
 def get_anchors(path):
     """
     todo
@@ -105,7 +106,7 @@ def train_yolo_v3(annotation_path,anchors_path):
     log_dir="logs/000/"
 
     #set according to your dataset"
-    classes_names=None
+    classes_names=['point','line']
     num_classes=len(classes_names)
     anchors=get_anchors(anchors_path)
 
@@ -169,3 +170,8 @@ def train_yolo_v3(annotation_path,anchors_path):
                         initial_epoch=50,
                         callbacks=[logging, checkpoint, reduce_lr, early_stopping])
             model.save_weights('yolo_v3/weight/yolo_v3_trained_weights_final.h5')
+
+
+if __name__=='__main__':
+    annotation_path='data/train.txt'
+
