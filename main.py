@@ -11,6 +11,7 @@ from keras.callbacks import TensorBoard,ModelCheckpoint,EarlyStopping,ReduceLROn
 from yolo_v3.model.model import preprocess_true_boxes,\
     yolo_body,tiny_yolo_body,yolo_loss,get_random_data
 from yolo_v3.annotation import convert_annotation
+import yolo_v3.kmeans as yolo_kmeans
 def get_anchors(path):
     """
     todo
@@ -20,10 +21,11 @@ def get_anchors(path):
     with open(path) as f:
         anchors=f.readline()
     archors=[float(x) for x in anchors.split(',')]
-    return np.array(anchors).reshape(-1,2)
+    print(archors)
+    return np.array(archors).reshape(-1,2)
 
 def create_tiny_model(input_shape, anchors, num_classes,
-                      load_pretrained=True, freeze_body=2,
+                      load_pretrained=False, freeze_body=2,
             weights_path='yolo_v3/weight/tiny_yolo_weights.h5'):
     K.clear_session()
     image_input=Input(shape=(None,None,3))
@@ -50,7 +52,7 @@ def create_tiny_model(input_shape, anchors, num_classes,
 
 def create_model(input_shape, anchors, num_classes,
                  load_pretrained=True, freeze_body=2,
-            weights_path='yolo_v3/weight/yolo_weights.h5'):
+            weights_path='yolo_v3/weight/yolov3_weights.h5'):
     K.clear_session()
     image_input=Input(shape=(None,None,3))
     h,w=input_shape
@@ -60,8 +62,9 @@ def create_model(input_shape, anchors, num_classes,
             num_anchors//3, num_classes+5)) for l in range(3)]
     model_body=yolo_body(image_input,num_anchors//3,num_classes)
     print('Create YOLOv3 model with {} anchors and {} classes.'.format(num_anchors, num_classes))
+
     if load_pretrained:
-        model_body.load_weights(weights_path,by_name=True,skip_mismatch=True)
+        model_body.load_weights(weights_path)
         print('load weights {}'.format(weights_path))
         if freeze_body in [1,2]:
             num=(185,len(model_body.layers)-3)[freeze_body-1]
@@ -69,10 +72,11 @@ def create_model(input_shape, anchors, num_classes,
                 model_body.layers[i].trainable=False
                 print('Freeze the first {} layers of total {} layers.'
                       ''.format(num, len(model_body.layers)))
-    model_loss=Lambda(yolo_loss, output_shape=(1,), name='yolo_loss',
-                       arguments={'anchors': anchors, 'num_classes': num_classes, 'ignore_thresh': 0.5})(
-                       [*model_body.output, *y_true])
-    model=Model([model_body.input,*y_true],model_loss)
+    model_loss = Lambda(yolo_loss, output_shape=(1,), name='yolo_loss',
+                        arguments={'anchors': anchors, 'num_classes': num_classes, 'ignore_thresh': 0.5})(
+        [*model_body.output, *y_true])
+    model = Model([model_body.input, *y_true], model_loss)
+    print('model architecture\n',model.summary())
     return model
 
 def data_generator(annotation_lines,batch_size,input_shape,anchors,num_classes):
@@ -139,7 +143,7 @@ def train_yolo_v3(annotation_path,anchors_path):
         model.compile(optimizer=Adam(lr=1e-3),loss={
             'yolo_loss':lambda y_ture,y_pred:y_pred
         })
-        batch_size=16
+        batch_size=1
         print('Train on {} samples, val on {} samples, with batch size {}.'
               ''.format(num_train, num_val, batch_size))
         model.fit_generator(data_generator_wrapper(lines[:num_train],batch_size,input_shape,
@@ -152,6 +156,7 @@ def train_yolo_v3(annotation_path,anchors_path):
                             initial_epoch=0,
                             callbacks=[logging,checkpoint]
                             )
+
         model.save_weights('yolo_v3/weight/yolo_v3_trained_weights_stage_1.h5')
 
         #unfreeze  and continue training, to fine tune
@@ -159,7 +164,7 @@ def train_yolo_v3(annotation_path,anchors_path):
             for i in range(len(model.layers)):
                 model.layers[i].trainable=True
             model.compile(optimizer=Adam(1e-4),loss={'yolo_loss':lambda y_true,y_pred:y_pred})
-            batch_size=16
+            batch_size=1
 
             print('Train on {} samples, val on {} samples, with batch size {}.'.format(num_train, num_val, batch_size))
             model.fit_generator(data_generator_wrapper(lines[:num_train], batch_size, input_shape, anchors, num_classes),
@@ -174,4 +179,8 @@ def train_yolo_v3(annotation_path,anchors_path):
 
 if __name__=='__main__':
     annotation_path='data/train.txt'
+
+    train_yolo_v3(annotation_path,anchors_path='data/yolo_anchors.txt')
+
+
 
